@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>matrix for xiaonian<    itle>
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.min.js"></script>
+    <script src="https://d3js.org/d3-color.v1.min.js"></script>
+    <script src="https://d3js.org/d3-dispatch.v1.min.js"></script>
+    <script src="https://d3js.org/d3-ease.v1.min.js"></script>
+    <script src="https://d3js.org/d3-interpolate.v1.min.js"></script>
+    <script src="https://d3js.org/d3-selection.v1.min.js"></script>
+    <script src="https://d3js.org/d3-timer.v1.min.js"></script>
+    <script src="https://d3js.org/d3-transition.v1.min.js"></script>
+</head>
+<body onselectstart="return false;">
+<div style="display:inline-block; float:left" id="container">
+</div>
+<script>
+function Matrix(options) {
+    var margin = {top: 75, right: 45, bottom: 5, left: 45},
+        width = 350,
+        height = 350,
+        hiddenMatrix = options.hiddenMatrix,
+        container = options.container,
+        startColor = options.start_color,
+        endColor = options.end_color
+        gameEndText = options.gameEndText;
+        
+    if(!hiddenMatrix){
+        throw new Error('Please pass hiddenMatrix');
+    }
+    if(!Array.isArray(hiddenMatrix) || !hiddenMatrix.length || !Array.isArray(hiddenMatrix[0])){
+        throw new Error('hiddenMatrix should be a 2-D array');
+    }
+    
+    var rowCnt = hiddenMatrix.length, colCnt = hiddenMatrix[0].length;
+    var transformedMatrix = new Array();
+    for (var i = 0; i < rowCnt; ++i) {
+        transformedMatrix[i] = new Array();
+        for (var j = 0; j < colCnt; ++j)
+            transformedMatrix[i][j] = 0;
+    }
+    var validator = function(x, y) {
+        return x >= 0 && x < rowCnt && y >= 0 && y < colCnt;
+    };
+    var direction = [
+        [0, 0],[1, 0],[-1, 0],
+        [0, 1],[0, -1],[1, 1],
+        [1, -1],[-1, 1],[-1, -1],
+    ];
+    for (var i = 0; i < rowCnt; ++i) {
+        for (var j = 0; j < colCnt; ++j) {
+            var sum = 0;
+            for (var d = 0; d < 9; ++d) {
+                var newx = i + direction[d][0], 
+                    newy = j + direction[d][1];
+                if (validator(newx, newy))
+                    sum += hiddenMatrix[newx][newy];
+            }
+            transformedMatrix[i][j] = sum;
+        }
+    }
+    
+    var data = transformedMatrix;
+    var maxValue = d3.max(data, function(layer) { return d3.max(layer, function(d) { return d; }); });
+    var minValue = d3.min(data, function(layer) { return d3.min(layer, function(d) { return d; }); });
+    var numrows = data.length;
+    var numcols = data[0].length;
+    var tileWidth = 36, tileHeight = 36;
+    width = tileWidth * numcols;
+    height = tileHeight * numrows;
+    var gameStartTransition = function() {return d3.transition().duration(2500).ease(d3.easeLinear)};
+    var operationTransition = function() {return d3.transition().duration(1000).ease(d3.easeLinear)};
+    var totalBlueBubbleCnt = 0;
+    for (var i = 0; i < hiddenMatrix.length; ++i) {
+        totalBlueBubbleCnt += d3.sum(hiddenMatrix[i])
+    }
+    //alert(totalBlueBubbleCnt);
+        
+    var svg = d3.select(container).append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .style("fill", "white")
+        .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+        
+    var title = svg.append("g")
+      .style("text-anchor", "middle")
+      .attr("transform", "translate(" + (width / 2) + "," + "-62" + ")");
+
+    title.append("text")
+      .attr("class", "title")
+      .attr("dy", "0.12em")
+      .style("fill", "black")
+      .text("find all blue bubbles and turn all numbers into zeroes! some bubbles are already discovered for you.");
+    title.append("text")
+      .attr("class", "title")
+      .attr("dy", "1.32em")
+      .style("fill", "black")
+      .text("number in the cell shows how many blue bubbles there are still undiscovered in it's adjacent cells(including itself).");
+    title.append("text")
+      .attr("class", "title")
+      .attr("dy", "2.52em")
+      .style("fill", "black")
+      .text("left click on blank tile to mark a blue bubble, right click to mark a non-blue bubble(red one), click one more time for blanking.");
+    
+
+    title.append("text")
+      .attr("class", "subtitle")
+      .attr("dy", "4.2em")
+      .text("hints: mind the zeroes.");
+
+    var background = svg.append("rect")
+        .style("stroke", "black")
+        .style("stroke-width", "2px")
+        .attr("width", width)
+        .attr("height", height);
+
+    var x = d3.scale.ordinal()
+        .domain(d3.range(numcols))
+        .rangeBands([0, width]);
+
+    var y = d3.scale.ordinal()
+        .domain(d3.range(numrows))
+        .rangeBands([0, height]);
+
+    colorSegmentationCnt = 12
+    whiteFontThreshold = colorSegmentationCnt - 5;
+    var colorMap = d3.scale.linear()
+        .domain([0,colorSegmentationCnt])
+        .range([startColor, endColor]);
+
+    var rows = svg.selectAll(".row")
+        .data(data)
+        .enter().append("g")
+        .property("rowIndex", function(d,i){return i;})
+        .attr("class", "row")
+        .attr("transform", function(d, i) { return "translate(0," + y(i) + ")"; });
+        
+    document.addEventListener("contextmenu", function(event){
+        event.preventDefault();
+    });
+    
+    clickedColor = endColor;
+    darkOrange = "#ffb758";
+    lightOrange = "#ffb758";
+    checkedColor = "#FF6666";
+    var discoverdBlueBubbleCnt = 0;
+    var cells = rows.selectAll(".cell")
+        .data(function(d) { return d; })
+            .enter().append("g")
+        .attr("class", "cell")
+        .attr("transform", function(d, i) { return "translate(" + x(i) + ", 0)"; })
+        .property("xCoordinate", function(){return this.parentNode.rowIndex;})
+        .property("yCoordinate", function(d, i){return i;})
+        .on("contextmenu", function(d, i) {
+            if (this.clicked)
+                return;
+            this.checked = this.checked ? false : true;
+            checked = this.checked;
+            checkedOpacity = checked ? 1 : 0;
+            d3.select(this).select("circle")
+            .transition(operationTransition()).style("fill", checked ? checkedColor : startColor)
+            .style("opacity", checkedOpacity);
+            d3.select(this).select("text")
+            .transition(operationTransition())
+            .style("fill", function(d, i) { return checked ? "white" : (Math.abs(d) >= whiteFontThreshold ? 'white' : 'black'); })
+        })
+        .on("click", function(d, i) {
+            if (this.checked)
+                return;
+            this.clicked = this.clicked ? false : true;
+            clicked = this.clicked;
+            clickedOpacity = clicked ? 1 : 0;
+            d3.select(this).select("circle")
+            .transition(operationTransition()).style("fill", clicked ? clickedColor : startColor)
+            .style("opacity", clickedOpacity);
+
+            currentIndex = i;
+            currentRowIndex = this.parentNode.rowIndex;
+            surroundings = 
+            rows.selectAll(".cell")
+            .filter(function(d, i) {
+                return Math.abs(this.parentNode.rowIndex - currentRowIndex)<=1
+                    && Math.abs(i-currentIndex)<=1;})
+            
+            surroundings
+            .property("__data__", function(d){return clicked ? d-1 : d+1;})
+            
+            surroundings
+            .transition(operationTransition())
+            .style("fill", function(d) {return colorMap(Math.abs(d));})
+            
+            surroundings
+            .select("text")
+            .text(function(d, i) { return d; });
+            
+            surroundings
+            //.filter(function(){return !this.clicked && !this.checked;})
+            .select("text")
+            .transition(operationTransition())
+            .style("fill", function(d, i) { return (this.parentNode.clicked || this.parentNode.checked || Math.abs(d) >= whiteFontThreshold) ? 'white' : 'black'; });
+            
+            d3.select(this).select("text")
+            .transition(operationTransition())
+            .style("fill", function(d, i) { return clicked ? "white" : (Math.abs(d) >= whiteFontThreshold ? 'white' : 'black'); })
+            
+            if (clicked && hiddenMatrix[this.xCoordinate][this.yCoordinate] == 1) 
+                discoverdBlueBubbleCnt++;
+            else if (!clicked && hiddenMatrix[this.xCoordinate][this.yCoordinate] == 1)
+                discoverdBlueBubbleCnt--;
+            if (discoverdBlueBubbleCnt == totalBlueBubbleCnt) {
+                setTimeout(function() {alert(gameEndText);}, 3000);
+            }
+        });
+        
+    cells.append('rect')
+        .attr("width", x.rangeBand())
+        .attr("height", y.rangeBand())
+        .style("stroke", "black")
+        .style("stroke-width", 0.1);
+    
+    cells.append('circle')
+        .attr("cx", tileWidth / 2)
+        .attr("cy", tileHeight / 2)
+        .attr("r", x.rangeBand() / 3)
+        .style("stroke-width", 0)
+        .style("fill", startColor)
+        .style("opacity", 0);
+        
+    /    ODO: randomly click and check some tiles 
+    //which means randomly toggle properties of clicked, checked for every tile
+    /    his.__data__ should be updated after click
+    cells
+    .property("clicked", function(d, i){
+        var clicked = hiddenMatrix[this.xCoordinate][this.yCoordinate] == 1 && Math.random() < 0.45;
+        if (clicked) {
+            discoverdBlueBubbleCnt++;
+            currentIndex = i;
+            currentRowIndex = this.parentNode.rowIndex;
+            surroundings = 
+            rows.selectAll(".cell")
+            .filter(function(d, i) {
+                return Math.abs(this.parentNode.rowIndex - currentRowIndex)<=1
+                    && Math.abs(i-currentIndex)<=1;})
+            
+            surroundings
+            .property("__data__", function(d){return clicked ? d-1 : d+1;})
+        }
+        return clicked;
+    })
+    .property("checked", function(){return !this.clicked && hiddenMatrix[this.xCoordinate][this.yCoordinate] == 0 && Math.random() < 0.6;})
+    ;
+    
+    //start initial rendering
+    cells
+    .transition(gameStartTransition())
+    .style("fill", function(d) {return colorMap(Math.abs(d));});
+    
+    cells.select("circle")
+    .transition(gameStartTransition())
+    .style("fill", function(){return this.parentNode.clicked ? clickedColor : (this.parentNode.checked ? checkedColor : startColor)})
+    .style("opacity", function(){return this.parentNode.clicked || this.parentNode.checked ? 1 : 0});
+    
+    cells
+    .append("text")
+    .attr("dy", ".32em")
+    .attr("x", x.rangeBand() / 2)
+    .attr("y", y.rangeBand() / 2)
+    .attr("text-anchor", "middle")
+    //.style("font-weight", "bolder")
+    .style("font-family", "Microsoft YaHei, Arial")
+    .text(function(d, i) { return d; })
+    .transition(gameStartTransition())
+    .style("fill", function(d, i) { return (this.parentNode.clicked || this.parentNode.checked || Math.abs(d) >= whiteFontThreshold) ? 'white' : 'black'; })
+    ;
+}
+</script>
+
+<script>
+var hiddenMatrix = [
+    [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+    [1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1],
+    [0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1],
+    [0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1],
+    [0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1],
+    [0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1],
+    [0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1],
+    [0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+    [0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1],
+    [0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1],
+    [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+];
+var bravo = "Happy Valentine's Day \\(￣3￣)/";
+var randomFigure = Math.random() < 0.5;
+if (randomFigure) {
+    for (var i = 0; i < hiddenMatrix.length; ++i) {
+        for (var j = 0; j < hiddenMatrix[0].length; ++j) {
+            if (Math.random() < 0.26)
+                hiddenMatrix[i][j] = 1;
+            else
+                hiddenMatrix[i][j] = 0;
+        }
+    }
+    bravo = "Game Success!";
+}
+
+Matrix({
+    container : '#container',
+    hiddenMatrix: hiddenMatrix,
+    start_color : '#ffffff',
+    end_color : '#3498db',
+    gameEndText : bravo
+});
+</script>
+
+<style type="text/css">
+.axis text {
+    font: 10px sans-serif;
+}
+.axis line, .axis path {
+    fill: none;
+    stroke: #000;
+    shape-rendering: crispEdges;
+}
+.title { font-size: 18px; font-weight: bold; font-family: Agency FB;}
+.subtitle { fill: #999;font-size: 14px; font-family: Agency FB;}
+</style>
+</body>
