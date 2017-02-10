@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>matrix for xiaonian<    itle>
+    <title>matrix for xiaonian</title>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.min.js"></script>
     <script src="https://d3js.org/d3-color.v1.min.js"></script>
     <script src="https://d3js.org/d3-dispatch.v1.min.js"></script>
@@ -229,9 +229,9 @@ function Matrix(options) {
         .style("fill", startColor)
         .style("opacity", 0);
         
-    /    ODO: randomly click and check some tiles 
+    //TODO: randomly click and check some tiles 
     //which means randomly toggle properties of clicked, checked for every tile
-    /    his.__data__ should be updated after click
+    //this.__data__ should be updated after click
     cells
     .property("clicked", function(d, i){
         var clicked = hiddenMatrix[this.xCoordinate][this.yCoordinate] == 1 && Math.random() < 0.45;
