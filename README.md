@@ -1,2 +1,2 @@
 # matrix for xiaonian
-^_^
+[Play && Have Fun ^_^](https://xt2357.github.io/matrixforxiaonian/)
